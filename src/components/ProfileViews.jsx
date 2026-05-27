@@ -255,6 +255,7 @@ export function ProfileView({ person, onClose, data }) {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <StatRow label="Full Name" value={personState.full_name || personState.name} />
                   <StatRow label="Employee ID" value={personState.employee_id || 'N/A'} />
+                  <StatRow label="Access Code" value={`${personState.access_code || personState.permissions?.access_code || 'N/A'} (${(personState.access_code_active ?? personState.permissions?.access_code_enabled) !== false ? 'Active' : 'Disabled'})`} />
                   <StatRow label="Phone Number" value={personState.phone || 'N/A'} />
                   <StatRow label="Emergency Contact" value={personState.emergency_phone || '99999-88888'} />
                   <StatRow label="Current Site" value={personState.site_name || 'Unassigned'} />
@@ -719,20 +720,140 @@ export function ProfileView({ person, onClose, data }) {
             </div>
           )}
 
-          {activeTab === 'Device History' && (
-            <div className="glass-card p-6 rounded-2xl animate-fadeIn space-y-6">
-              <h3 className="text-xl font-black">Bound Device Registry</h3>
-              <div className="p-4 rounded-xl bg-surface-container border flex justify-between items-center">
-                <div>
-                  <h4 className="font-bold text-sm">Primary Mobile Binding</h4>
-                  <p className="text-xs text-on-surface-variant mt-1">Bound Device: {personState.bound_device_id || 'N/A'}</p>
+          {activeTab === 'Device History' && (() => {
+            const [localHistory, setLocalHistory] = useState([]);
+            const [loadingHistory, setLoadingHistory] = useState(false);
+            const [clearing, setClearing] = useState(false);
+
+            useEffect(() => {
+              const fetchHistory = async () => {
+                const auth = JSON.parse(localStorage.getItem('ms-owner-auth'));
+                if (!auth?.token) return;
+                setLoadingHistory(true);
+                try {
+                  const historyData = await getUserLoginHistory(auth.token, personState.id);
+                  setLocalHistory(historyData || []);
+                } catch (err) {
+                  console.error(err);
+                } finally {
+                  setLoadingHistory(false);
+                }
+              };
+              fetchHistory();
+            }, [personState.id]);
+
+            const handleClearBinding = async () => {
+              if (!window.confirm("Are you sure you want to clear the device binding for this user?")) return;
+              const auth = JSON.parse(localStorage.getItem('ms-owner-auth'));
+              if (!auth?.token) return;
+              setClearing(true);
+              try {
+                const result = await updateUser(auth.token, personState.id, { clear_device_binding: true });
+                setPersonState(result.user);
+                alert("Device binding cleared successfully!");
+              } catch (err) {
+                alert(`Failed to clear device binding: ${err.message}`);
+              } finally {
+                setClearing(false);
+              }
+            };
+
+            return (
+              <div className="glass-card p-6 rounded-2xl animate-fadeIn space-y-6">
+                <div className="flex justify-between items-center border-b border-outline-variant/10 pb-4">
+                  <div>
+                    <h3 className="text-xl font-black">Bound Device & Login History</h3>
+                    <p className="text-xs text-on-surface-variant font-medium">Verify login history, login pictures, device fingerprints, and clear bindings.</p>
+                  </div>
+                  {personState.bound_device_id && (
+                    <button
+                      type="button"
+                      disabled={clearing}
+                      onClick={handleClearBinding}
+                      className="px-4 py-2 bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 rounded-xl text-xs font-black transition-all"
+                    >
+                      {clearing ? 'Clearing...' : 'Clear Device Binding'}
+                    </button>
+                  )}
                 </div>
-                <span className={`px-2.5 py-0.5 rounded font-black text-[10px] uppercase ${personState.bound_device_id ? 'bg-primary/10 text-primary' : 'bg-surface-container-highest text-on-surface-variant'}`}>
-                  {personState.bound_device_id ? 'SECURED' : 'UNBOUND'}
-                </span>
+
+                <div className="p-4 rounded-xl bg-surface-container border flex justify-between items-center">
+                  <div>
+                    <h4 className="font-bold text-sm">Primary Mobile Binding</h4>
+                    <p className="text-xs text-on-surface-variant mt-1">Bound Device: {personState.bound_device_id || 'N/A'}</p>
+                  </div>
+                  <span className={`px-2.5 py-0.5 rounded font-black text-[10px] uppercase ${personState.bound_device_id ? 'bg-primary/10 text-primary' : 'bg-surface-container-highest text-on-surface-variant'}`}>
+                    {personState.bound_device_id ? 'SECURED' : 'UNBOUND'}
+                  </span>
+                </div>
+
+                <div className="space-y-4 pt-4">
+                  <h4 className="font-bold text-sm">Login Attempts & Verified Selfies</h4>
+                  {loadingHistory ? (
+                    <p className="text-xs text-on-surface-variant">Loading login history...</p>
+                  ) : localHistory.length > 0 ? (
+                    <div className="overflow-x-auto border border-outline-variant/10 rounded-2xl">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="bg-surface-container border-b border-outline-variant/10 text-on-surface-variant font-bold">
+                            <th className="p-3">Selfie</th>
+                            <th className="p-3">Timestamp</th>
+                            <th className="p-3">Status</th>
+                            <th className="p-3">Device / Platform</th>
+                            <th className="p-3">Failure Reason</th>
+                            <th className="p-3">Location</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {localHistory.map((lh, idx) => (
+                            <tr key={lh.id || idx} className="border-b border-outline-variant/10 last:border-0 hover:bg-on-surface/5 transition-all">
+                              <td className="p-3">
+                                {lh.selfie_url ? (
+                                  <a href={lh.selfie_url} target="_blank" rel="noreferrer" className="block w-12 h-16 rounded overflow-hidden border bg-surface-container hover:scale-105 transition-all">
+                                    <img src={lh.selfie_url} alt="Selfie" className="w-full h-full object-cover" />
+                                  </a>
+                                ) : (
+                                  <span className="text-on-surface-variant italic">No image</span>
+                                )}
+                              </td>
+                              <td className="p-3 font-semibold whitespace-nowrap">
+                                {lh.login_time ? new Date(lh.login_time).toLocaleString() : '--'}
+                              </td>
+                              <td className="p-3">
+                                <span className={`px-2 py-0.5 rounded font-black text-[9px] uppercase ${
+                                  lh.status === 'success' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
+                                }`}>
+                                  {lh.status}
+                                </span>
+                              </td>
+                              <td className="p-3">
+                                <div className="font-semibold">{lh.device_model || 'Unknown'}</div>
+                                <div className="text-[10px] text-on-surface-variant opacity-75">{lh.platform} {lh.os_version}</div>
+                              </td>
+                              <td className="p-3 font-medium text-red-600">
+                                {lh.failure_reason || '--'}
+                              </td>
+                              <td className="p-3">
+                                {lh.location ? (
+                                  <div className="font-semibold">
+                                    Lat: {lh.location.latitude?.toFixed(4)}, Lon: {lh.location.longitude?.toFixed(4)}
+                                  </div>
+                                ) : (
+                                  <span className="text-on-surface-variant">--</span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-on-surface-variant italic">No login history recorded yet.</p>
+                  )}
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {activeTab === 'Settings' && (
             <div className="glass-card p-6 rounded-2xl animate-fadeIn space-y-6">
@@ -898,7 +1019,7 @@ export function ProfileView({ person, onClose, data }) {
                   </div>
                 </div>
                 
-                <div className="flex gap-4 pt-4 border-t border-outline-variant/10">
+                <div className="flex flex-wrap gap-4 pt-4 border-t border-outline-variant/10">
                   <button type="submit" disabled={updatingSettings} className="px-6 h-12 bg-primary text-white font-bold rounded-xl text-sm hover:brightness-110 active:scale-95 transition-all shadow-lg shadow-primary/10">
                     {updatingSettings ? 'Saving...' : 'Save Settings'}
                   </button>
@@ -917,6 +1038,42 @@ export function ProfileView({ person, onClose, data }) {
                     }`}
                   >
                     {settingsForm.is_active ? 'Deactivate / Suspend User' : 'Reactivate / Resume User'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const newPassword = window.prompt("Enter new password for this user:");
+                      if (!newPassword) return;
+                      const auth = JSON.parse(localStorage.getItem('ms-owner-auth'));
+                      if (!auth?.token) return;
+                      try {
+                        await updateUser(auth.token, personState.id, { password: newPassword });
+                        setSettingsStatus('Password updated successfully.');
+                      } catch (err) {
+                        setSettingsStatus(`Password reset failed: ${err.message}`);
+                      }
+                    }}
+                    className="px-6 h-12 bg-surface-container-high border border-outline-variant/30 text-on-surface font-bold rounded-xl text-sm hover:bg-on-surface/5 active:scale-95 transition-all"
+                  >
+                    Reset Password
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!window.confirm("Regenerate a new Access Code and Employee ID for this user? This will deactivate the old access code immediately.")) return;
+                      const auth = JSON.parse(localStorage.getItem('ms-owner-auth'));
+                      if (!auth?.token) return;
+                      try {
+                        const result = await updateUser(auth.token, personState.id, { regenerate_access_code: true });
+                        setPersonState(result.user);
+                        setSettingsStatus(`New Access Code generated: ${result.user.access_code || result.user.permissions?.access_code}`);
+                      } catch (err) {
+                        setSettingsStatus(`Regeneration failed: ${err.message}`);
+                      }
+                    }}
+                    className="px-6 h-12 bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 font-bold rounded-xl text-sm active:scale-95 transition-all"
+                  >
+                    Regenerate Access Code
                   </button>
                 </div>
                 {settingsStatus && <p className="text-xs text-primary font-bold">{settingsStatus}</p>}

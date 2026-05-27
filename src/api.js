@@ -190,3 +190,7 @@ export async function deleteSite(token, siteId) {
   });
 }
 
+export async function getUserLoginHistory(token, userId) {
+  return request(CORE_URL, `/api/v1/owner/users/${userId}/login-history`, { token });
+}
+
