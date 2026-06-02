@@ -1,5 +1,7 @@
-const CORE_URL = (import.meta.env.VITE_API_BASE_URL_CORE || 'https://backend-1-m3js.onrender.com').replace(/\/+$/, '');
-const OPS_URL = (import.meta.env.VITE_API_BASE_URL_OPERATIONS || 'https://backend-2-sqc7.onrender.com').replace(/\/+$/, '');
+const CORE_URL = (import.meta.env.VITE_API_BASE_URL_CORE || import.meta.env.VITE_API_BASE_URL_GATEWAY || 'https://ms-security-gateway.onrender.com').replace(/\/+$/, '');
+const OPS_URL = (import.meta.env.VITE_API_BASE_URL_OPERATIONS || import.meta.env.VITE_API_BASE_URL_GATEWAY || 'https://ms-security-gateway.onrender.com').replace(/\/+$/, '');
+const REALTIME_URL = (import.meta.env.VITE_API_BASE_URL_REALTIME || import.meta.env.VITE_API_BASE_URL_GATEWAY || 'https://ms-security-gateway.onrender.com').replace(/\/+$/, '');
+const MEDIA_URL = (import.meta.env.VITE_API_BASE_URL_MEDIA || import.meta.env.VITE_API_BASE_URL_GATEWAY || 'https://ms-security-gateway.onrender.com').replace(/\/+$/, '');
 
 async function request(baseUrl, path, options = {}) {
   const response = await fetch(`${baseUrl}${path}`, {
@@ -54,14 +56,15 @@ export async function loadOwnerData(token) {
     request(CORE_URL, '/api/v1/owner/users', { token }),
     request(CORE_URL, '/api/v1/owner/sites', { token }),
     request(CORE_URL, '/api/v1/owner/documents', { token }),
-    request(CORE_URL, '/api/v1/attendance/list', { token }),
+    request(OPS_URL, '/api/v1/attendance/list', { token }),
+
     request(CORE_URL, '/api/v1/controls', { token }),
-    request(OPS_URL, '/api/v1/tracking/live', { token }),
+    request(REALTIME_URL, '/api/v1/tracking/live', { token }),
     request(OPS_URL, '/api/v1/grooming/list', { token }),
     request(OPS_URL, '/api/v1/overtime/list', { token }),
-    request(OPS_URL, '/api/v1/alerts/list', { token }),
-    request(OPS_URL, '/api/v1/owner/fraud', { token }),
-    request(OPS_URL, '/api/v1/owner/activity', { token }),
+    request(REALTIME_URL, '/api/v1/alerts/list', { token }),
+    request(REALTIME_URL, '/api/v1/owner/fraud', { token }),
+    request(REALTIME_URL, '/api/v1/owner/activity', { token }),
   ]);
 
   return {
@@ -98,8 +101,9 @@ export async function getSystemTelemetry(token) {
 }
 
 export async function getOpsTelemetry(token) {
-  return request(OPS_URL, '/api/v1/owner/ops-telemetry', { token });
+  return request(REALTIME_URL, '/api/v1/owner/ops-telemetry', { token });
 }
+
 
 export async function cleanupStorage(token) {
   return request(OPS_URL, '/api/v1/owner/storage/cleanup', {
@@ -114,7 +118,7 @@ export async function reviewDocument(token, documentId, decision, rejectionReaso
   if (rejectionReason) {
     formData.append('rejection_reason', rejectionReason);
   }
-  return request(CORE_URL, `/api/v1/documents/${documentId}/review`, {
+  return request(MEDIA_URL, `/api/v1/documents/${documentId}/review`, {
     token,
     method: 'POST',
     body: formData,
@@ -123,7 +127,7 @@ export async function reviewDocument(token, documentId, decision, rejectionReaso
 
 
 export async function reviewAttendance(token, attendanceId, decision, notes = '') {
-  return request(CORE_URL, `/api/v1/attendance/${attendanceId}/review`, {
+  return request(OPS_URL, `/api/v1/attendance/${attendanceId}/review`, {
     token,
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -132,13 +136,14 @@ export async function reviewAttendance(token, attendanceId, decision, notes = ''
 }
 
 export async function broadcastNotification(token, payload) {
-  return request(CORE_URL, '/api/v1/owner/notifications/broadcast', {
+  return request(REALTIME_URL, '/api/v1/owner/notifications/broadcast', {
     token,
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
 }
+
 
 export async function createUser(token, payload) {
   return request(CORE_URL, '/api/v1/owner/users/create', {

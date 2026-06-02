@@ -4,7 +4,7 @@ import { loadOwnerData, login, updateControls } from './api';
 import { DashboardView } from './components/Dashboard';
 import { MonitoringView } from './components/Monitoring';
 import { AnalyticsView, PeopleView, SitesView } from './components/AnalyticsPeopleSites';
-import { FraudView, ReportsView, VerificationView, SettingsView, StorageManagementView, NotificationsView } from './components/MiscViews';
+import { FraudView, ReportsView, VerificationView, SettingsView, StorageManagementView, NotificationsView, WorkforceGalleryView } from './components/MiscViews';
 import { BackendControlCenterView } from './components/BackendControlCenter';
 
 const REFRESH_INTERVAL_MS = 20_000;
@@ -13,6 +13,7 @@ const navItems = [
   { name: 'Dashboard', icon: 'dashboard' },
   { name: 'Backend Control Center', icon: 'developer_board' },
   { name: 'Monitoring', icon: 'radar' },
+  { name: 'Photo Audit Hub', icon: 'photo_library' },
   { name: 'All Workforce', icon: 'groups' },
   { name: 'Guards', icon: 'group' },
   { name: 'Supervisors', icon: 'badge' },
@@ -325,6 +326,7 @@ function App() {
 
         {!loading && activePage === 'Dashboard' && <DashboardView data={data} guards={guards} activeAlerts={activeAlerts} />}
         {!loading && activePage === 'Backend Control Center' && <BackendControlCenterView />}
+        {!loading && activePage === 'Photo Audit Hub' && <WorkforceGalleryView data={data} />}
         {!loading && activePage === 'Verification' && <VerificationView data={data} />}
         {!loading && activePage === 'Monitoring' && <MonitoringView data={data} />}
         {!loading && activePage === 'Analytics' && <AnalyticsView data={data} />}

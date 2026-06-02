@@ -3,7 +3,7 @@ import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { AreaChart, Area, XAxis, Tooltip, ResponsiveContainer, BarChart, Bar, YAxis, LineChart, Line } from 'recharts';
-import { updateUser, deleteUser, broadcastNotification, reviewDocument } from '../api';
+import { updateUser, deleteUser, broadcastNotification, reviewDocument, reviewAttendance } from '../api';
 
 
 
@@ -57,6 +57,7 @@ export function ProfileView({ person, onClose, data }) {
     full_name: personState.full_name || personState.name || '',
     phone: personState.phone || '',
     site_id: personState.site_id || '',
+    site_ids: personState.site_ids || (personState.site_id ? [personState.site_id] : []),
     role: personState.role || 'guard',
     is_active: personState.is_active !== false,
     emergency_phone: personState.permissions?.emergency_phone || personState.emergency_phone || '',
@@ -66,12 +67,16 @@ export function ProfileView({ person, onClose, data }) {
     shift_cycle: personState.permissions?.shift_cycle || 'fixed',
     overtime_allowed: !!personState.permissions?.overtime_allowed,
     profile_image_url: personState.permissions?.profile_image_url || '',
+    access_code: personState.permissions?.access_code || personState.access_code || '',
   });
   const [updatingSettings, setUpdatingSettings] = useState(false);
   const [settingsStatus, setSettingsStatus] = useState('');
   
   // Document Review States
   const [localDocs, setLocalDocs] = useState([]);
+  const [localAttendance, setLocalAttendance] = useState([]);
+  const [reviewNotes, setReviewNotes] = useState('');
+  const [reviewingId, setReviewingId] = useState(null);
   const [rejectionDocId, setRejectionDocId] = useState(null);
   const [rejectionReasonText, setRejectionReasonText] = useState('');
   const [reviewingDocId, setReviewingDocId] = useState(null);
@@ -79,7 +84,8 @@ export function ProfileView({ person, onClose, data }) {
   // Local state update when prop changes
   useEffect(() => {
     setLocalDocs((data.documents || []).filter(d => d.user_id === person.id));
-  }, [data.documents, person.id]);
+    setLocalAttendance((data.attendance || []).filter(a => a.user_id === person.id));
+  }, [data.documents, data.attendance, person.id]);
 
   useEffect(() => {
     setPersonState(person);
@@ -87,6 +93,7 @@ export function ProfileView({ person, onClose, data }) {
       full_name: person.full_name || person.name || '',
       phone: person.phone || '',
       site_id: person.site_id || '',
+      site_ids: person.site_ids || (person.site_id ? [person.site_id] : []),
       role: person.role || 'guard',
       is_active: person.is_active !== false,
       emergency_phone: person.permissions?.emergency_phone || person.emergency_phone || '',
@@ -96,13 +103,14 @@ export function ProfileView({ person, onClose, data }) {
       shift_cycle: person.permissions?.shift_cycle || 'fixed',
       overtime_allowed: !!person.permissions?.overtime_allowed,
       profile_image_url: person.permissions?.profile_image_url || '',
+      access_code: person.permissions?.access_code || person.access_code || '',
     });
   }, [person]);
 
   const role = String(personState.role || 'guard').toLowerCase();
   
   // Filter lists matching this person
-  const attendance = (data.attendance || []).filter(a => a.user_id === personState.id);
+  const attendance = localAttendance;
   const docs = (data.documents || []).filter(d => d.user_id === personState.id);
   const activity = (data.activity || []).filter(a => a.user_id === personState.id);
   const overtime = (data.overtime || []).filter(o => o.user_id === personState.id);
@@ -162,6 +170,41 @@ export function ProfileView({ person, onClose, data }) {
     }
   };
 
+  const handleReviewAttendanceSession = async (recId, decision) => {
+    const auth = JSON.parse(localStorage.getItem('ms-owner-auth'));
+    if (!auth?.token) return;
+    setReviewingId(recId);
+    try {
+      await reviewAttendance(auth.token, recId, decision, reviewNotes);
+      setLocalAttendance(prev => prev.map(a => a.id === recId ? { 
+        ...a, 
+        status: decision === 'approved' ? 'approved' : 'rejected',
+        review_notes: reviewNotes,
+        reviewed_by_name: 'Owner / Admin'
+      } : a));
+      setSelectedCalendarDate(prev => {
+        if (prev && prev.record && prev.record.id === recId) {
+          return {
+            ...prev,
+            status: decision === 'approved' ? 'Present' : 'Absent',
+            record: {
+              ...prev.record,
+              status: decision === 'approved' ? 'approved' : 'rejected',
+              review_notes: reviewNotes,
+              reviewed_by_name: 'Owner / Admin'
+            }
+          };
+        }
+        return prev;
+      });
+      setReviewNotes('');
+    } catch (err) {
+      alert(`Review failed: ${err.message}`);
+    } finally {
+      setReviewingId(null);
+    }
+  };
+
   // Update Settings trigger
   const handleUpdateSettings = async (e) => {
     e.preventDefault();
@@ -174,8 +217,10 @@ export function ProfileView({ person, onClose, data }) {
         full_name: settingsForm.full_name,
         phone: settingsForm.phone,
         site_id: settingsForm.site_id,
+        site_ids: settingsForm.site_ids,
         role: settingsForm.role,
         is_active: settingsForm.is_active,
+        access_code: settingsForm.access_code,
         permissions: {
           emergency_phone: settingsForm.emergency_phone,
           address: settingsForm.address,
@@ -184,6 +229,7 @@ export function ProfileView({ person, onClose, data }) {
           shift_cycle: settingsForm.shift_cycle,
           overtime_allowed: settingsForm.overtime_allowed,
           profile_image_url: settingsForm.profile_image_url,
+          access_code: settingsForm.access_code,
         }
       };
       const result = await updateUser(auth.token, personState.id, payload);
@@ -438,8 +484,8 @@ export function ProfileView({ person, onClose, data }) {
                     </div>
                   </div>
                   
-                  <div className="glass-card p-6 rounded-2xl space-y-4">
-                    <h4 className="font-bold text-lg">Shift Timeline & Verification</h4>
+                  <div className="glass-card p-6 rounded-2xl space-y-6 overflow-y-auto max-h-[600px]">
+                    <h4 className="font-bold text-lg border-b border-black/5 pb-2">Shift Timeline & Verification</h4>
                     {selectedCalendarDate ? (
                       selectedCalendarDate.record ? (() => {
                         const rec = selectedCalendarDate.record;
@@ -459,30 +505,120 @@ export function ProfileView({ person, onClose, data }) {
                           totalWorkHours = `${(diffMs / (1000 * 60 * 60)).toFixed(1)} hrs`;
                         }
 
+                        const missingItemLabels = {
+                          id_card: 'ID Card Missing',
+                          hair: 'Hair Non-Compliant',
+                          shave: 'Shave Non-Compliant',
+                          belt: 'Belt Missing',
+                          cap: 'Cap Missing',
+                          tie: 'Tie Missing',
+                          shoes: 'Shoes Not Polished',
+                          safety_jacket: 'Safety Jacket Missing',
+                          cleanliness: 'Unclean Appearance',
+                          shoulder_strap: 'Shoulder Strap Missing',
+                          black_lanyard: 'Black Lanyard Missing',
+                          dirty_dress: 'Dirty / Wrinkled Dress',
+                        };
+
                         return (
-                          <div className="space-y-4 animate-fadeIn">
+                          <div className="space-y-6 animate-fadeIn text-left">
+                            {/* Photo Previews */}
                             <div className="flex gap-4">
                               {rec.photo_url && (
-                                <div className="w-1/2 aspect-[3/4] rounded-lg overflow-hidden border">
-                                  <p className="text-[10px] uppercase font-bold text-center bg-surface-container py-1">Check-in Photo</p>
-                                  <img src={rec.photo_url} alt="Selfie" className="w-full h-full object-cover" />
+                                <div className="w-1/2 rounded-xl overflow-hidden border border-outline-variant/10 shadow-sm">
+                                  <p className="text-[10px] uppercase font-bold text-center bg-surface-container py-1.5 text-on-surface-variant">Check-in Photo</p>
+                                  <div className="aspect-[3/4] overflow-hidden bg-black flex items-center justify-center">
+                                    <img src={rec.photo_url} alt="Check-in" className="w-full h-full object-cover" />
+                                  </div>
                                 </div>
                               )}
-                              {rec.checkout_selfie_path && (
-                                <div className="w-1/2 aspect-[3/4] rounded-lg overflow-hidden border">
-                                  <p className="text-[10px] uppercase font-bold text-center bg-surface-container py-1">Check-out Photo</p>
-                                  <img src={rec.photo_url} alt="Selfie" className="w-full h-full object-cover" />
+                              {rec.checkout_photo_url && (
+                                <div className="w-1/2 rounded-xl overflow-hidden border border-outline-variant/10 shadow-sm">
+                                  <p className="text-[10px] uppercase font-bold text-center bg-surface-container py-1.5 text-on-surface-variant">Check-out Photo</p>
+                                  <div className="aspect-[3/4] overflow-hidden bg-black flex items-center justify-center">
+                                    <img src={rec.checkout_photo_url} alt="Check-out" className="w-full h-full object-cover" />
+                                  </div>
                                 </div>
                               )}
                             </div>
-                            <div className="space-y-3 text-sm">
+
+                            {/* Shift timeline parameters */}
+                            <div className="space-y-2.5 text-sm p-4 rounded-2xl bg-surface-container-low border border-outline-variant/5">
                               <TimelineItem label="Scheduled Shift Time" value="08:00 AM → 08:00 PM" />
                               <TimelineItem label="Actual Check-In" value={checkIn ? checkIn.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--'} />
                               <TimelineItem label="Actual Check-Out" value={checkOut ? checkOut.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Still on Duty'} />
                               <TimelineItem label="Late Duration" value={lateMin > 0 ? `${lateMin} min late` : 'On Time'} tone={lateMin > 0 ? 'warning' : 'success'} />
                               <TimelineItem label="Total Work Hours" value={totalWorkHours} />
-                              <TimelineItem label="Grooming Compliance" value={rec.ai_raw?.uniform_score ? `${Math.round(rec.ai_raw.uniform_score * 100)}%` : 'Verified'} />
+                              <TimelineItem label="Verification status" value={rec.status?.toUpperCase() || 'PENDING'} tone={rec.status === 'approved' ? 'success' : rec.status === 'rejected' ? 'warning' : 'info'} />
                             </div>
+
+                            {/* Grooming Check Deficiencies */}
+                            <div className="p-4 rounded-2xl border border-outline-variant/10 space-y-3">
+                              <div className="flex items-center justify-between border-b border-black/5 pb-2">
+                                <span className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Grooming Checklist</span>
+                                <span className={`text-xs px-2.5 py-0.5 rounded-full font-black uppercase ${
+                                  rec.grooming_status === 'pass' ? 'bg-emerald-100 text-emerald-800' : rec.grooming_status === 'fail' ? 'bg-amber-100 text-amber-800' : 'bg-surface-container-highest text-on-surface-variant'
+                                }`}>
+                                  {rec.grooming_status === 'fail' ? 'warning' : rec.grooming_status || 'unchecked'}
+                                </span>
+                              </div>
+                              {rec.missing_items && rec.missing_items.length > 0 ? (
+                                <div className="space-y-2">
+                                  <p className="text-xs font-bold text-amber-600 flex items-center gap-1">
+                                    <span className="material-symbols-outlined text-[16px]">warning</span> Missing/Deficient Uniform Items:
+                                  </p>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {rec.missing_items.map((item, idx) => (
+                                      <span key={idx} className="bg-amber-50 text-amber-800 border border-amber-200 px-2 py-1 rounded-lg text-[10px] font-bold">
+                                        {missingItemLabels[item] || item}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : (
+                                <p className="text-xs text-emerald-600 font-semibold flex items-center gap-1">
+                                  <span className="material-symbols-outlined text-[16px]">check_circle</span> Perfect Compliance. No deficiencies.
+                                </p>
+                              )}
+                            </div>
+
+                            {/* Verification review decisions */}
+                            {['pending_review', 'manual_review'].includes(rec.status) ? (
+                              <div className="space-y-3 pt-2 border-t border-black/5 animate-fadeIn">
+                                <div>
+                                  <label className="block text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1">Auditor Verification Notes</label>
+                                  <textarea
+                                    value={reviewNotes}
+                                    onChange={(e) => setReviewNotes(e.target.value)}
+                                    placeholder="Add optional notes or compliance feedback..."
+                                    className="w-full p-2.5 rounded-xl bg-surface-container border border-outline-variant/15 outline-none text-xs focus:ring-1 focus:ring-primary/20 h-16 resize-none"
+                                  />
+                                </div>
+                                <div className="flex gap-2">
+                                  <button
+                                    disabled={reviewingId === rec.id}
+                                    onClick={() => handleReviewAttendanceSession(rec.id, 'approved')}
+                                    className="flex-1 bg-emerald-600 text-white py-2.5 rounded-xl text-xs font-bold hover:brightness-110 active:scale-[0.98] transition-all flex items-center justify-center gap-1.5"
+                                  >
+                                    <span className="material-symbols-outlined text-[16px]">verified</span> {reviewingId === rec.id ? 'Processing...' : 'Approve Shift'}
+                                  </button>
+                                  <button
+                                    disabled={reviewingId === rec.id}
+                                    onClick={() => handleReviewAttendanceSession(rec.id, 'rejected')}
+                                    className="flex-1 bg-rose-50 text-rose-600 border border-rose-100 py-2.5 rounded-xl text-xs font-bold hover:bg-rose-100/50 active:scale-[0.98] transition-all flex items-center justify-center gap-1.5"
+                                  >
+                                    <span className="material-symbols-outlined text-[16px]">block</span> {reviewingId === rec.id ? 'Processing...' : 'Reject Shift'}
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="p-3.5 rounded-2xl bg-surface-container text-xs space-y-1.5 border border-outline-variant/10">
+                                <p className="font-bold text-on-surface">Verification Review Audit</p>
+                                <p className="text-on-surface-variant font-medium">Status: <span className={`uppercase font-black ${rec.status === 'approved' ? 'text-emerald-600' : 'text-rose-600'}`}>{rec.status}</span></p>
+                                {rec.reviewed_by_name && <p className="text-on-surface-variant font-medium">Reviewed By: {rec.reviewed_by_name}</p>}
+                                {rec.review_notes && <p className="text-on-surface-variant italic mt-1 bg-surface-container-low p-2 rounded-lg border border-black/5">"{rec.review_notes}"</p>}
+                              </div>
+                            )}
                           </div>
                         );
                       })() : <div className="text-on-surface-variant text-center py-12">User was Absent on this date.</div>
@@ -928,17 +1064,55 @@ export function ProfileView({ person, onClose, data }) {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1">Assign Site</label>
-                    <select
-                      value={settingsForm.site_id}
-                      onChange={(e) => setSettingsForm(prev => ({ ...prev, site_id: e.target.value }))}
-                      className="w-full h-12 px-4 rounded-xl bg-surface-container border-none outline-none focus:ring-1 focus:ring-primary/20 text-sm font-semibold"
-                    >
-                      <option value="">Unassigned</option>
-                      {(data.sites || []).map(s => (
-                        <option key={s.id} value={s.id}>{s.name}</option>
-                      ))}
-                    </select>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1">Assign Site(s)</label>
+                    {['supervisor', 'admin'].includes(settingsForm.role) ? (
+                      <div className="w-full max-h-48 overflow-y-auto p-3 rounded-xl bg-surface-container border-none outline-none focus:ring-1 focus:ring-primary/20 space-y-2">
+                        {(data.sites || []).map(s => {
+                          const isChecked = (settingsForm.site_ids || []).includes(s.id);
+                          return (
+                            <label key={s.id} className="flex items-center space-x-3 cursor-pointer p-2 hover:bg-surface/50 rounded-lg transition-colors">
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={(e) => {
+                                  setSettingsForm(prev => {
+                                    const currentIds = prev.site_ids || [];
+                                    const nextIds = e.target.checked 
+                                      ? [...currentIds, s.id]
+                                      : currentIds.filter(id => id !== s.id);
+                                    return { 
+                                      ...prev, 
+                                      site_ids: nextIds,
+                                      site_id: nextIds[0] || ''
+                                    };
+                                  });
+                                }}
+                                className="w-4 h-4 rounded accent-primary cursor-pointer"
+                              />
+                              <span className="text-sm font-semibold text-on-surface">{s.name}</span>
+                            </label>
+                          );
+                        })}
+                        {(data.sites || []).length === 0 && (
+                          <div className="text-xs text-on-surface-variant italic">No sites available</div>
+                        )}
+                      </div>
+                    ) : (
+                      <select
+                        value={settingsForm.site_id}
+                        onChange={(e) => setSettingsForm(prev => ({ 
+                          ...prev, 
+                          site_id: e.target.value,
+                          site_ids: e.target.value ? [e.target.value] : []
+                        }))}
+                        className="w-full h-12 px-4 rounded-xl bg-surface-container border-none outline-none focus:ring-1 focus:ring-primary/20 text-sm font-semibold"
+                      >
+                        <option value="">Unassigned</option>
+                        {(data.sites || []).map(s => (
+                          <option key={s.id} value={s.id}>{s.name}</option>
+                        ))}
+                      </select>
+                    )}
                   </div>
                   <div>
                     <label className="block text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1">Role Permission Group</label>
@@ -947,9 +1121,9 @@ export function ProfileView({ person, onClose, data }) {
                       onChange={(e) => setSettingsForm(prev => ({ ...prev, role: e.target.value }))}
                       className="w-full h-12 px-4 rounded-xl bg-surface-container border-none outline-none focus:ring-1 focus:ring-primary/20 text-sm font-semibold"
                     >
-                      <option value="guard">Guard</option>
-                      <option value="supervisor">Supervisor</option>
                       <option value="admin">Admin</option>
+                      <option value="supervisor">Supervisor</option>
+                      <option value="guard">None</option>
                     </select>
                   </div>
                   <div>
@@ -1004,6 +1178,16 @@ export function ProfileView({ person, onClose, data }) {
                       placeholder="https://example.com/photo.jpg"
                       value={settingsForm.profile_image_url}
                       onChange={(e) => setSettingsForm(prev => ({ ...prev, profile_image_url: e.target.value }))}
+                      className="w-full h-12 px-4 rounded-xl bg-surface-container border-none outline-none focus:ring-1 focus:ring-primary/20 text-sm font-semibold"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1">Access Code (4 to 18 characters)</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 123456 or MYCODE (4 to 18 chars)"
+                      value={settingsForm.access_code}
+                      onChange={(e) => setSettingsForm(prev => ({ ...prev, access_code: e.target.value }))}
                       className="w-full h-12 px-4 rounded-xl bg-surface-container border-none outline-none focus:ring-1 focus:ring-primary/20 text-sm font-semibold"
                     />
                   </div>

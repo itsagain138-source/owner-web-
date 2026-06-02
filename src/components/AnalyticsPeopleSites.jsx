@@ -2,6 +2,26 @@ import React, { useMemo, useState } from 'react';
 import { ProfileView, checkPermission } from './ProfileViews';
 import { AreaChart, Area, XAxis, Tooltip, ResponsiveContainer, BarChart, Bar, YAxis } from 'recharts';
 import { createUser, createSite, updateSite, deleteSite } from '../api';
+import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+});
+
+function MapEventsHelper({ onClick }) {
+  useMapEvents({
+    click(e) {
+      onClick(e.latlng.lat, e.latlng.lng);
+    },
+  });
+  return null;
+}
+
 
 function downloadCsv(filename, rows) {
 
@@ -192,6 +212,7 @@ export function PeopleView({ title, people, data }) {
     role: 'guard',
     site_id: '',
     phone: '',
+    access_code: '',
   });
   const [creatingUser, setCreatingUser] = useState(false);
   const [createError, setCreateError] = useState('');
@@ -230,7 +251,7 @@ export function PeopleView({ title, people, data }) {
         site_name: (data.sites || []).find(s => s.id === createForm.site_id)?.name || 'Unassigned'
       });
       setShowCreateModal(false);
-      setCreateForm({ email: '', password: '', full_name: '', role: 'guard', site_id: '', phone: '' });
+      setCreateForm({ email: '', password: '', full_name: '', role: 'guard', site_id: '', phone: '', access_code: '' });
     } catch (err) {
       setCreateError(err.message);
     } finally {
@@ -413,15 +434,19 @@ export function PeopleView({ title, people, data }) {
                 <div>
                   <label className="block text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1">Permission Group</label>
                   <select value={createForm.role} onChange={(e) => setCreateForm(prev => ({ ...prev, role: e.target.value }))} className="w-full h-12 px-4 rounded-xl bg-surface-container border-none outline-none focus:ring-0 text-sm font-semibold">
-                    <option value="guard">Guard</option>
-                    <option value="supervisor">Supervisor</option>
                     <option value="admin">Admin</option>
+                    <option value="supervisor">Supervisor</option>
+                    <option value="guard">None</option>
                   </select>
                 </div>
                 <div>
                   <label className="block text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1">Phone</label>
                   <input type="text" value={createForm.phone} onChange={(e) => setCreateForm(prev => ({ ...prev, phone: e.target.value }))} className="w-full h-12 px-4 rounded-xl bg-surface-container border-none outline-none focus:ring-0 text-sm font-semibold" />
                 </div>
+              </div>
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1">Custom Access Code (Optional, 4-18 characters)</label>
+                <input type="text" placeholder="e.g. 123456 or MYCODE (Auto-generated if blank)" value={createForm.access_code || ''} onChange={(e) => setCreateForm(prev => ({ ...prev, access_code: e.target.value }))} className="w-full h-12 px-4 rounded-xl bg-surface-container border-none outline-none focus:ring-0 text-sm font-semibold" />
               </div>
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1">Custom Workspace Role (Optional)</label>
@@ -679,6 +704,17 @@ export function SitesView({ sites, live = [], users = [] }) {
                   <input type="number" required value={createForm.radius_meters} onChange={(e) => setCreateForm(prev => ({ ...prev, radius_meters: parseInt(e.target.value) }))} className="w-full h-12 px-4 rounded-xl bg-surface-container border-none outline-none focus:ring-0 text-sm font-semibold" />
                 </div>
               </div>
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1">Map Selection</label>
+                <div className="h-44 w-full rounded-xl overflow-hidden border border-black/10 mt-1">
+                  <MapContainer center={[createForm.latitude || 19.0596, createForm.longitude || 72.8656]} zoom={13} style={{ height: '100%', width: '100%' }}>
+                    <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                    <Marker position={[createForm.latitude || 19.0596, createForm.longitude || 72.8656]} />
+                    <MapEventsHelper onClick={(lat, lng) => setCreateForm(prev => ({ ...prev, latitude: lat, longitude: lng }))} />
+                  </MapContainer>
+                </div>
+                <span className="text-[10px] text-on-surface-variant italic mt-1 block">💡 Click on the map above to select site coordinates automatically.</span>
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1">Shift Start</label>
@@ -732,6 +768,17 @@ export function SitesView({ sites, live = [], users = [] }) {
                   <label className="block text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1">Radius (m)</label>
                   <input type="number" required value={editForm.radius_meters} onChange={(e) => setEditForm(prev => ({ ...prev, radius_meters: parseInt(e.target.value) }))} className="w-full h-12 px-4 rounded-xl bg-surface-container border-none outline-none focus:ring-0 text-sm font-semibold" />
                 </div>
+              </div>
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1">Map Selection</label>
+                <div className="h-44 w-full rounded-xl overflow-hidden border border-black/10 mt-1">
+                  <MapContainer center={[editForm.latitude || 19.0596, editForm.longitude || 72.8656]} zoom={13} style={{ height: '100%', width: '100%' }}>
+                    <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                    <Marker position={[editForm.latitude || 19.0596, editForm.longitude || 72.8656]} />
+                    <MapEventsHelper onClick={(lat, lng) => setEditForm(prev => ({ ...prev, latitude: lat, longitude: lng }))} />
+                  </MapContainer>
+                </div>
+                <span className="text-[10px] text-on-surface-variant italic mt-1 block">💡 Click on the map above to select site coordinates automatically.</span>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>

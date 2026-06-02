@@ -231,6 +231,12 @@ export function VerificationView({ data }) {
               <button className="flex-1 py-3 bg-error/10 text-error hover:bg-error/20 rounded-xl font-bold" disabled={working} onClick={() => handleAttendanceReview(previewPhoto, 'rejected')}>Reject</button>
               <button className="flex-1 py-3 bg-emerald-500 text-white hover:bg-emerald-600 rounded-xl font-bold" disabled={working} onClick={() => handleAttendanceReview(previewPhoto, 'approved')}>Approve</button>
             </div>
+          ) : previewPhoto.vtype === 'Audit' ? (
+            <div className="w-full rounded-xl bg-surface-container-low p-4 text-on-surface-variant space-y-2 text-left">
+              <p><strong>Review Status:</strong> <span className={`uppercase font-black ${previewPhoto.status === 'approved' ? 'text-emerald-600' : 'text-rose-600'}`}>{previewPhoto.status}</span></p>
+              <p><strong>Reviewed By:</strong> {previewPhoto.reviewed_by_name || 'System / AI'}</p>
+              {previewPhoto.review_notes && <p><strong>Auditor Notes:</strong> {previewPhoto.review_notes}</p>}
+            </div>
           ) : (
             <div className="w-full rounded-xl bg-surface-container-low p-4 text-on-surface-variant">
               Grooming records are displayed from the operations backend for audit visibility. Supervisor-submitted entries are viewable here, while approval flow currently applies to attendance and documents.
@@ -278,6 +284,27 @@ export function VerificationView({ data }) {
           action: <button className="px-4 py-2 bg-primary text-white rounded-lg font-label-md hover:bg-primary/90 transition-colors" onClick={() => setPreviewPhoto({ ...item, vtype: 'Grooming' })}>Open Photo</button>,
         }))}
         emptyText="No grooming photos available."
+      />
+
+      <VerificationTable
+        title="Audit Logs (Approved / Rejected Verification History)"
+        badge={`${(data.attendance || []).filter(item => item.status === 'approved' || item.status === 'rejected').length} Audited`}
+        columns={['Staff Name', 'Staff Role', 'Review Status', 'Site Location', 'Reviewed By', 'Action']}
+        rows={(data.attendance || [])
+          .filter(item => item.status === 'approved' || item.status === 'rejected')
+          .slice(0, 15)
+          .map((item) => ({
+            key: item.id,
+            cells: [
+              item.user_name || 'Staff',
+              (item.role || 'guard').toUpperCase(),
+              item.status.toUpperCase(),
+              item.site_name || 'Site',
+              item.reviewed_by_name || 'System / Auto',
+            ],
+            action: <button className="px-4 py-2 bg-surface-container hover:bg-surface-container-high border rounded-lg font-label-md transition-colors" onClick={() => setPreviewPhoto({ ...item, vtype: 'Audit' })}>Inspect</button>,
+          }))}
+        emptyText="No audited records available yet."
       />
     </div>
   );
@@ -614,6 +641,206 @@ export function NotificationsView() {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+export function WorkforceGalleryView({ data }) {
+  const [activeTab, setActiveTab] = React.useState('Check-In');
+  const [searchQuery, setSearchQuery] = React.useState('');
+  const [zoomPhoto, setZoomPhoto] = React.useState(null);
+
+  // Group photos by category
+  const checkInPhotos = React.useMemo(() => {
+    return (data.attendance || [])
+      .filter(item => item.selfie_path || item.photo_url)
+      .map(item => ({
+        id: item.id,
+        user_name: item.user_name || 'Staff Member',
+        employee_id: item.employee_id || 'GRD-N/A',
+        time: item.check_in_at || item.created_at,
+        url: item.photo_url || item.selfie_path,
+        site_name: item.site_name || 'Assigned Site',
+        purpose: 'Duty Check-In',
+        status: item.status
+      }));
+  }, [data.attendance]);
+
+  const checkOutPhotos = React.useMemo(() => {
+    return (data.attendance || [])
+      .filter(item => item.checkout_selfie_path)
+      .map(item => ({
+        id: item.id,
+        user_name: item.user_name || 'Staff Member',
+        employee_id: item.employee_id || 'GRD-N/A',
+        time: item.check_out_at,
+        url: item.checkout_photo_url || item.checkout_selfie_path,
+        site_name: item.site_name || 'Assigned Site',
+        purpose: 'Duty Check-Out',
+        status: item.status
+      }));
+  }, [data.attendance]);
+
+  const groomingPhotos = React.useMemo(() => {
+    return (data.grooming || [])
+      .filter(item => item.photo_url || item.photo_path)
+      .map(item => ({
+        id: item.id,
+        user_name: item.user?.full_name || item.user_name || 'Staff Member',
+        employee_id: item.user?.employee_id || item.employee_id || 'GRD-N/A',
+        time: item.created_at,
+        url: item.photo_url || item.photo_path,
+        site_name: item.site?.name || item.site_name || 'Assigned Site',
+        purpose: `Grooming Check (${item.rating || 'pass'})`,
+        status: item.rating
+      }));
+  }, [data.grooming]);
+
+  const documentPhotos = React.useMemo(() => {
+    return (data.documents || [])
+      .filter(item => item.file_path || item.file_url)
+      .map(item => ({
+        id: item.id,
+        user_name: item.user_name || 'Staff Member',
+        employee_id: item.employee_id || 'GRD-N/A',
+        time: item.uploaded_at,
+        url: item.file_url || item.file_path,
+        site_name: 'Compliance File',
+        purpose: `KYC Document: ${(item.document_type || 'other').toUpperCase()}`,
+        status: item.status
+      }));
+  }, [data.documents]);
+
+  const activePhotos = React.useMemo(() => {
+    let list = [];
+    if (activeTab === 'Check-In') list = checkInPhotos;
+    else if (activeTab === 'Check-Out') list = checkOutPhotos;
+    else if (activeTab === 'Grooming') list = groomingPhotos;
+    else if (activeTab === 'KYC') list = documentPhotos;
+
+    if (!searchQuery.trim()) return list;
+    const q = searchQuery.toLowerCase();
+    return list.filter(item => 
+      item.user_name.toLowerCase().includes(q) || 
+      item.employee_id.toLowerCase().includes(q) ||
+      item.site_name.toLowerCase().includes(q) ||
+      item.purpose.toLowerCase().includes(q)
+    );
+  }, [activeTab, searchQuery, checkInPhotos, checkOutPhotos, groomingPhotos, documentPhotos]);
+
+  return (
+    <div className="pb-12 max-w-[1600px] mx-auto space-y-6">
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 animate-fadeIn">
+        <div>
+          <h2 className="font-headline-lg text-headline-lg text-on-surface tracking-tight">Workforce Audit Gallery</h2>
+          <p className="font-body-md text-body-md text-on-surface-variant">Live visual feed of all photos uploaded by workforce personnel.</p>
+        </div>
+        <div className="w-full md:w-80">
+          <input 
+            type="text" 
+            placeholder="Search by guard name, ID, or site..." 
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full bg-surface-container-low border border-outline-variant/10 rounded-xl px-4 py-2.5 text-sm font-semibold outline-none focus:ring-2 focus:ring-primary/20"
+          />
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex bg-surface-container-low p-1.5 rounded-2xl w-fit gap-1 border border-outline-variant/5">
+        {['Check-In', 'Check-Out', 'Grooming', 'KYC'].map(tab => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={`px-5 py-2.5 rounded-xl font-bold text-sm transition-all ${
+              activeTab === tab 
+                ? 'bg-primary text-white shadow-lg shadow-primary/10' 
+                : 'text-on-surface-variant hover:bg-on-surface/5'
+            }`}
+          >
+            {tab === 'Check-In' ? 'Check-In Selfies' : tab === 'Check-Out' ? 'Check-Out Selfies' : tab === 'Grooming' ? 'Grooming Audits' : 'KYC Documents'}
+          </button>
+        ))}
+      </div>
+
+      {/* Grid of Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+        {activePhotos.map((photo, index) => (
+          <div key={photo.id || index} className="glass-card rounded-2xl overflow-hidden flex flex-col group transition-all duration-300 hover:shadow-xl hover:-translate-y-1" style={{ padding: 0 }}>
+            {/* Photo Container */}
+            <div className="h-56 bg-black relative overflow-hidden cursor-pointer" onClick={() => setZoomPhoto(photo)}>
+              <img src={photo.url} alt="Captured" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                <span className="material-symbols-outlined text-white text-3xl">zoom_in</span>
+              </div>
+              <span className="absolute bottom-3 left-3 bg-black/60 text-white text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider">
+                {photo.purpose}
+              </span>
+            </div>
+
+            {/* Meta Info */}
+            <div className="p-4 flex-1 flex flex-col justify-between space-y-4">
+              <div className="flex items-start justify-between gap-2">
+                <div style={{ minWidth: 0 }}>
+                  <h4 className="font-bold text-sm text-on-surface truncate">{photo.user_name}</h4>
+                  <p className="text-[11px] text-on-surface-variant opacity-60">ID: {photo.employee_id}</p>
+                </div>
+                {photo.status && (
+                  <span className={`text-[9px] font-bold uppercase px-2 py-0.5 rounded-full shrink-0 ${
+                    ['approved', 'pass'].includes(photo.status) ? 'bg-emerald-50 text-emerald-600' : ['rejected', 'fail'].includes(photo.status) ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-600'
+                  }`}>
+                    {photo.status}
+                  </span>
+                )}
+              </div>
+
+              <div className="text-[11px] text-on-surface-variant space-y-1 border-t border-black/5 pt-3">
+                <p className="flex items-center gap-1"><span className="material-symbols-outlined text-xs">business</span>{photo.site_name}</p>
+                <p className="flex items-center gap-1"><span className="material-symbols-outlined text-xs">schedule</span>{photo.time ? new Date(photo.time).toLocaleString() : 'N/A'}</p>
+              </div>
+            </div>
+          </div>
+        ))}
+
+        {activePhotos.length === 0 && (
+          <div className="col-span-12 py-16 text-center text-on-surface-variant bg-surface-container-low rounded-2xl border border-dashed border-outline-variant/50">
+            <span className="material-symbols-outlined text-4xl mb-3 opacity-30">photo_library</span>
+            <p className="font-bold">No photos found in this category.</p>
+            <p className="text-xs opacity-60 mt-1">Personnel uploads will appear here in real time.</p>
+          </div>
+        )}
+      </div>
+
+      {/* Lightbox / Zoom Dialog */}
+      {zoomPhoto && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm" onClick={() => setZoomPhoto(null)}>
+          <div className="max-w-4xl max-h-[85vh] relative flex flex-col items-center" onClick={(e) => e.stopPropagation()}>
+            <button onClick={() => setZoomPhoto(null)} className="absolute -top-12 right-0 text-white p-2 hover:text-red-500 transition-colors">
+              <span className="material-symbols-outlined text-3xl">close</span>
+            </button>
+            <div className="bg-surface rounded-3xl overflow-hidden shadow-2xl flex flex-col md:flex-row max-w-full">
+              <div className="bg-black max-h-[60vh] md:max-h-[80vh] flex items-center justify-center max-w-2xl">
+                <img src={zoomPhoto.url} alt="Zoomed Audit" className="max-w-full max-h-full object-contain" />
+              </div>
+              <div className="p-6 md:w-80 flex flex-col justify-between space-y-6 shrink-0 bg-surface">
+                <div className="space-y-4">
+                  <div>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-primary">{zoomPhoto.purpose}</span>
+                    <h3 className="text-xl font-bold text-on-surface mt-1">{zoomPhoto.user_name}</h3>
+                    <p className="text-xs text-on-surface-variant opacity-60">Employee ID: {zoomPhoto.employee_id}</p>
+                  </div>
+                  <div className="space-y-2 border-t border-black/5 pt-4 text-xs text-on-surface-variant">
+                    <p className="flex items-center gap-1.5"><span className="material-symbols-outlined text-sm">business</span><strong>Site:</strong> {zoomPhoto.site_name}</p>
+                    <p className="flex items-center gap-1.5"><span className="material-symbols-outlined text-sm">schedule</span><strong>Uploaded:</strong> {zoomPhoto.time ? new Date(zoomPhoto.time).toLocaleString() : 'N/A'}</p>
+                    {zoomPhoto.status && <p className="flex items-center gap-1.5"><span className="material-symbols-outlined text-sm">check_circle</span><strong>Audit Status:</strong> <span className="capitalize">{zoomPhoto.status}</span></p>}
+                  </div>
+                </div>
+                <button onClick={() => setZoomPhoto(null)} className="w-full py-3 bg-primary text-white font-bold rounded-xl text-sm shadow-lg shadow-primary/20 hover:brightness-110 active:scale-95 transition-all">Close Viewer</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
