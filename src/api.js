@@ -1,7 +1,5 @@
 const CORE_URL = (import.meta.env.VITE_API_BASE_URL_CORE || import.meta.env.VITE_API_BASE_URL_GATEWAY || 'https://ms-security-gateway.onrender.com').replace(/\/+$/, '');
 const OPS_URL = (import.meta.env.VITE_API_BASE_URL_OPERATIONS || import.meta.env.VITE_API_BASE_URL_GATEWAY || 'https://ms-security-gateway.onrender.com').replace(/\/+$/, '');
-const REALTIME_URL = (import.meta.env.VITE_API_BASE_URL_REALTIME || import.meta.env.VITE_API_BASE_URL_GATEWAY || 'https://ms-security-gateway.onrender.com').replace(/\/+$/, '');
-const MEDIA_URL = (import.meta.env.VITE_API_BASE_URL_MEDIA || import.meta.env.VITE_API_BASE_URL_GATEWAY || 'https://ms-security-gateway.onrender.com').replace(/\/+$/, '');
 
 async function request(baseUrl, path, options = {}) {
   const response = await fetch(`${baseUrl}${path}`, {
@@ -59,12 +57,12 @@ export async function loadOwnerData(token) {
     request(OPS_URL, '/api/v1/attendance/list', { token }),
 
     request(CORE_URL, '/api/v1/controls', { token }),
-    request(REALTIME_URL, '/api/v1/tracking/live', { token }),
+    request(OPS_URL, '/api/v1/tracking/live', { token }),
     request(OPS_URL, '/api/v1/grooming/list', { token }),
     request(OPS_URL, '/api/v1/overtime/list', { token }),
-    request(REALTIME_URL, '/api/v1/alerts/list', { token }),
-    request(REALTIME_URL, '/api/v1/owner/fraud', { token }),
-    request(REALTIME_URL, '/api/v1/owner/activity', { token }),
+    request(OPS_URL, '/api/v1/alerts/list', { token }),
+    request(OPS_URL, '/api/v1/owner/fraud', { token }),
+    request(OPS_URL, '/api/v1/owner/activity', { token }),
   ]);
 
   return {
@@ -101,7 +99,7 @@ export async function getSystemTelemetry(token) {
 }
 
 export async function getOpsTelemetry(token) {
-  return request(REALTIME_URL, '/api/v1/owner/ops-telemetry', { token });
+  return request(OPS_URL, '/api/v1/owner/ops-telemetry', { token });
 }
 
 
@@ -118,7 +116,7 @@ export async function reviewDocument(token, documentId, decision, rejectionReaso
   if (rejectionReason) {
     formData.append('rejection_reason', rejectionReason);
   }
-  return request(MEDIA_URL, `/api/v1/documents/${documentId}/review`, {
+  return request(CORE_URL, `/api/v1/documents/${documentId}/review`, {
     token,
     method: 'POST',
     body: formData,
@@ -136,7 +134,7 @@ export async function reviewAttendance(token, attendanceId, decision, notes = ''
 }
 
 export async function broadcastNotification(token, payload) {
-  return request(REALTIME_URL, '/api/v1/owner/notifications/broadcast', {
+  return request(OPS_URL, '/api/v1/owner/notifications/broadcast', {
     token,
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
