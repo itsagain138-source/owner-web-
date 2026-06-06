@@ -223,7 +223,7 @@ export function VerificationView({ data }) {
       {previewPhoto && (
         <PreviewModal title={`Photo Preview: ${previewPhoto.vtype}`} onClose={() => setPreviewPhoto(null)}>
           <div className="w-full h-[60vh] bg-black mb-6 rounded-xl flex items-center justify-center overflow-hidden border border-outline/10">
-            <img src={previewPhoto.photo_url || previewPhoto.photo_path} alt="Preview" className="w-full h-full object-cover" />
+            <img src={previewPhoto.checkout_photo_url || previewPhoto.photo_url || previewPhoto.photo_path} alt="Preview" className="w-full h-full object-cover" />
           </div>
           {previewPhoto.vtype === 'Attendance' ? (
             <div className="flex gap-4 w-full">
@@ -474,45 +474,13 @@ function InputRow({ label, value, onChange, type = 'text' }) {
   );
 }
 
+import MediaManager from './MediaManager';
+
 export function StorageManagementView() {
-  const [stats, setStats] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const auth = JSON.parse(localStorage.getItem('ms-owner-auth'));
-    if (auth?.token) {
-      getStorageStats(auth.token).then(setStats).catch(console.error).finally(() => setLoading(false));
-    }
-  }, []);
-
-  const handleCleanup = async () => {
-    const auth = JSON.parse(localStorage.getItem('ms-owner-auth'));
-    if (auth?.token) {
-      setLoading(true);
-      await cleanupStorage(auth.token).catch(console.error);
-      getStorageStats(auth.token).then(setStats).catch(console.error).finally(() => setLoading(false));
-    }
-  };
-
-  if (loading) return <div className="glass-card rounded-2xl p-6 text-on-surface">Loading storage stats...</div>;
-  if (!stats) return <div className="p-4 bg-error/10 text-error rounded-xl font-body-md">Failed to load storage stats.</div>;
-
-  const renderGb = (bytes) => `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
-
+  const auth = JSON.parse(localStorage.getItem('ms-owner-auth'));
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-      <div className="glass-card rounded-2xl p-6">
-        <h3 className="font-title-lg text-on-surface mb-4">Primary Storage (Supabase)</h3>
-        <p className="text-on-surface-variant mb-2">Limit: <span className="text-on-surface font-bold">{renderGb(stats.supabase.limit_bytes)}</span></p>
-        <p className="text-on-surface-variant">Usage: <span className="text-primary font-bold">Managed by bucket dashboard</span></p>
-      </div>
-      <div className="glass-card rounded-2xl p-6">
-        <h3 className="font-title-lg text-on-surface mb-4">Fallback Storage (PostgreSQL)</h3>
-        <p className="text-on-surface-variant mb-2">Limit: <span className="text-on-surface font-bold">{renderGb(stats.render_db.limit_bytes)}</span></p>
-        <p className="text-on-surface-variant mb-2">Usage: <span className="text-on-surface font-bold">{renderGb(stats.render_db.used_bytes)}</span></p>
-        <p className="text-on-surface-variant mb-6">Stored Photos: <span className="text-primary font-bold">{stats.render_db.photo_count}</span></p>
-        <button className="px-6 py-2 bg-primary text-white rounded-lg font-label-md hover:bg-primary/90 transition-colors" onClick={handleCleanup}>Force Cleanup Expired</button>
-      </div>
+    <div className="glass-card rounded-2xl p-6">
+      <MediaManager token={auth?.token} />
     </div>
   );
 }

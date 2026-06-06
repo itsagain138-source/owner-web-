@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
-import { loadOwnerData, login, updateControls } from './api';
+import { loadOwnerData, login, updateControls, warmupBackends } from './api';
 
 import { DashboardView } from './components/Dashboard';
 import { MonitoringView } from './components/Monitoring';
 import { AnalyticsView, PeopleView, SitesView } from './components/AnalyticsPeopleSites';
-import { FraudView, ReportsView, VerificationView, SettingsView, StorageManagementView, NotificationsView, WorkforceGalleryView } from './components/MiscViews';
+import { FraudView, ReportsView, VerificationView, SettingsView, NotificationsView, WorkforceGalleryView } from './components/MiscViews';
+import { MediaCenterView } from './components/MediaCenter';
 import { BackendControlCenterView } from './components/BackendControlCenter';
+import DevDebugPanel from './components/DevDebugPanel';
 
 const REFRESH_INTERVAL_MS = 20_000;
 
@@ -13,17 +15,17 @@ const navItems = [
   { name: 'Dashboard', icon: 'dashboard' },
   { name: 'Backend Control Center', icon: 'developer_board' },
   { name: 'Monitoring', icon: 'radar' },
-  { name: 'Photo Audit Hub', icon: 'photo_library' },
   { name: 'All Workforce', icon: 'groups' },
   { name: 'Guards', icon: 'group' },
   { name: 'Supervisors', icon: 'badge' },
   { name: 'Admins', icon: 'admin_panel_settings' },
+  { name: 'Other Staff', icon: 'engineering' },
   { name: 'Sites', icon: 'location_on' },
   { name: 'Analytics', icon: 'monitoring' },
   { name: 'Fraud Center', icon: 'security' },
   { name: 'Verification', icon: 'verified' },
   { name: 'Reports', icon: 'description' },
-  { name: 'Storage Management', icon: 'storage' },
+  { name: 'Media Center', icon: 'photo_library' },
   { name: 'Notifications', icon: 'notifications_active' },
   { name: 'Settings', icon: 'settings' },
 ];
@@ -65,6 +67,10 @@ function App() {
   const [loading, setLoading] = useState(Boolean(auth));
   const [error, setError] = useState('');
   const [savingControls, setSavingControls] = useState(false);
+
+  useEffect(() => {
+    warmupBackends();
+  }, []);
 
   useEffect(() => {
     if (!auth?.token) {
@@ -124,6 +130,7 @@ function App() {
   const guards = filteredPeople.filter((item) => item.role === 'guard');
   const supervisors = filteredPeople.filter((item) => item.role === 'supervisor');
   const admins = filteredPeople.filter((item) => item.role === 'admin' || item.role === 'owner');
+  const otherStaff = filteredPeople.filter((item) => !['guard', 'supervisor', 'admin', 'owner'].includes(item.role));
   const filteredSites = useMemo(() => {
     const needle = query.trim().toLowerCase();
     if (!needle) {
@@ -168,11 +175,13 @@ function App() {
   };
 
   function handleLogout() {
-    localStorage.removeItem('ms-owner-auth');
-    setAuth(null);
-    setData(defaultData);
-    setActivePage('Dashboard');
-    setError('');
+    if (window.confirm("Are you sure you want to sign out?")) {
+      localStorage.removeItem('ms-owner-auth');
+      setAuth(null);
+      setData(defaultData);
+      setActivePage('Dashboard');
+      setError('');
+    }
   }
 
   async function handleSaveControls(nextControls) {
@@ -326,21 +335,22 @@ function App() {
 
         {!loading && activePage === 'Dashboard' && <DashboardView data={data} guards={guards} activeAlerts={activeAlerts} />}
         {!loading && activePage === 'Backend Control Center' && <BackendControlCenterView />}
-        {!loading && activePage === 'Photo Audit Hub' && <WorkforceGalleryView data={data} />}
         {!loading && activePage === 'Verification' && <VerificationView data={data} />}
-        {!loading && activePage === 'Monitoring' && <MonitoringView data={data} />}
+        {!loading && activePage === 'Monitoring' && <MonitoringView data={data} token={auth.token} />}
         {!loading && activePage === 'Analytics' && <AnalyticsView data={data} />}
         {!loading && activePage === 'All Workforce' && <PeopleView title="Workforce Management — All Roles" people={filteredPeople} data={data} />}
         {!loading && activePage === 'Guards' && <PeopleView title="Guard Management" people={guards} data={data} />}
         {!loading && activePage === 'Supervisors' && <PeopleView title="Supervisor Management" people={supervisors} data={data} />}
         {!loading && activePage === 'Admins' && <PeopleView title="Admin Management" people={admins} data={data} />}
+        {!loading && activePage === 'Other Staff' && <PeopleView title="Other Staff Management" people={otherStaff} data={data} />}
         {!loading && activePage === 'Sites' && <SitesView sites={filteredSites} live={data.live || []} users={data.users || []} />}
         {!loading && activePage === 'Fraud Center' && <FraudView data={data} />}
         {!loading && activePage === 'Reports' && <ReportsView data={data} />}
-        {!loading && activePage === 'Storage Management' && <StorageManagementView />}
+        {!loading && activePage === 'Media Center' && <MediaCenterView />}
         {!loading && activePage === 'Notifications' && <NotificationsView />}
         {!loading && activePage === 'Settings' && <SettingsView controls={data.controls} onSave={handleSaveControls} saving={savingControls} />}
       </main>
+      <DevDebugPanel />
     </div>
   );
 }

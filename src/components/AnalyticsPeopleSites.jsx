@@ -436,7 +436,13 @@ export function PeopleView({ title, people, data }) {
                   <select value={createForm.role} onChange={(e) => setCreateForm(prev => ({ ...prev, role: e.target.value }))} className="w-full h-12 px-4 rounded-xl bg-surface-container border-none outline-none focus:ring-0 text-sm font-semibold">
                     <option value="admin">Admin</option>
                     <option value="supervisor">Supervisor</option>
-                    <option value="guard">None</option>
+                    <option value="hr">HR</option>
+                    <option value="captain">Captain</option>
+                    <option value="guard">Guard</option>
+                    <option value="electrician">Electrician</option>
+                    <option value="maintenance">Maintenance</option>
+                    <option value="housekeeping">Housekeeping</option>
+                    <option value="office_staff">Office Staff</option>
                   </select>
                 </div>
                 <div>
