@@ -1,8 +1,8 @@
 // ── MS Security Owner Web – API Client ──
 // Features: Retry with backoff, timeout, graceful degradation, debug logging
 
-const CORE_URL = (import.meta.env.VITE_API_BASE_URL_CORE || import.meta.env.VITE_API_BASE_URL_GATEWAY || 'https://ms-security-gateway.onrender.com').replace(/\/+$/, '');
-const OPS_URL = (import.meta.env.VITE_API_BASE_URL_OPERATIONS || import.meta.env.VITE_API_BASE_URL_GATEWAY || 'https://ms-security-gateway.onrender.com').replace(/\/+$/, '');
+const CORE_URL = (import.meta.env.VITE_API_BASE_URL_CORE || import.meta.env.VITE_API_BASE_URL_GATEWAY || import.meta.env.VITE_API_BASE_URL || '').replace(/\/+$/, '');
+const OPS_URL = (import.meta.env.VITE_API_BASE_URL_OPERATIONS || import.meta.env.VITE_API_BASE_URL_GATEWAY || import.meta.env.VITE_API_BASE_URL || '').replace(/\/+$/, '');
 
 // ── Debug Log Store ──
 const MAX_DEBUG_LOGS = 200;

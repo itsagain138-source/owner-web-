@@ -7,7 +7,6 @@ import { AnalyticsView, PeopleView, SitesView } from './components/AnalyticsPeop
 import { FraudView, ReportsView, VerificationView, SettingsView, NotificationsView, WorkforceGalleryView } from './components/MiscViews';
 import { MediaCenterView } from './components/MediaCenter';
 import { BackendControlCenterView } from './components/BackendControlCenter';
-import DevDebugPanel from './components/DevDebugPanel';
 
 const REFRESH_INTERVAL_MS = 20_000;
 
@@ -26,7 +25,7 @@ const navItems = [
   { name: 'Verification', icon: 'verified' },
   { name: 'Reports', icon: 'description' },
   { name: 'Media Center', icon: 'photo_library' },
-  { name: 'Notifications', icon: 'notifications_active' },
+
   { name: 'Settings', icon: 'settings' },
 ];
 
@@ -350,7 +349,6 @@ function App() {
         {!loading && activePage === 'Notifications' && <NotificationsView />}
         {!loading && activePage === 'Settings' && <SettingsView controls={data.controls} onSave={handleSaveControls} saving={savingControls} />}
       </main>
-      <DevDebugPanel />
     </div>
   );
 }

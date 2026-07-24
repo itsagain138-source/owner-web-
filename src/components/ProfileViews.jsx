@@ -3,7 +3,7 @@ import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { AreaChart, Area, XAxis, Tooltip, ResponsiveContainer, BarChart, Bar, YAxis, LineChart, Line } from 'recharts';
-import { updateUser, deleteUser, broadcastNotification, reviewDocument, reviewAttendance } from '../api';
+import { updateUser, deleteUser, broadcastNotification, reviewDocument, reviewAttendance, getUserLoginHistory } from '../api';
 
 
 
@@ -80,6 +80,46 @@ export function ProfileView({ person, onClose, data }) {
   const [rejectionDocId, setRejectionDocId] = useState(null);
   const [rejectionReasonText, setRejectionReasonText] = useState('');
   const [reviewingDocId, setReviewingDocId] = useState(null);
+
+  // Device History States
+  const [localHistory, setLocalHistory] = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [clearing, setClearing] = useState(false);
+
+  useEffect(() => {
+    if (activeTab === 'Device History') {
+      const fetchHistory = async () => {
+        const auth = JSON.parse(localStorage.getItem('ms-owner-auth'));
+        if (!auth?.token) return;
+        setLoadingHistory(true);
+        try {
+          const historyData = await getUserLoginHistory(auth.token, personState.id);
+          setLocalHistory(historyData || []);
+        } catch (err) {
+          console.error(err);
+        } finally {
+          setLoadingHistory(false);
+        }
+      };
+      fetchHistory();
+    }
+  }, [personState.id, activeTab]);
+
+  const handleClearBinding = async () => {
+    if (!window.confirm("Are you sure you want to clear the device binding for this user?")) return;
+    const auth = JSON.parse(localStorage.getItem('ms-owner-auth'));
+    if (!auth?.token) return;
+    setClearing(true);
+    try {
+      const result = await updateUser(auth.token, personState.id, { clear_device_binding: true });
+      setPersonState(result.user);
+      alert("Device binding cleared successfully!");
+    } catch (err) {
+      alert(`Failed to clear device binding: ${err.message}`);
+    } finally {
+      setClearing(false);
+    }
+  };
 
   // Local state update when prop changes
   useEffect(() => {
@@ -256,7 +296,7 @@ export function ProfileView({ person, onClose, data }) {
           
           <div className="absolute bottom-6 left-10 flex items-end gap-6 z-10">
             <div className="relative group">
-              <img src={personState.photo_url || getAvatar(personState.full_name || personState.name)} alt="Avatar" className="w-28 h-28 rounded-2xl border-4 border-white/20 bg-surface object-cover shadow-xl" />
+              <img src={personState.profile_photo_url || personState.photo_url || getAvatar(personState.full_name || personState.name)} alt="Avatar" className="w-28 h-28 rounded-2xl border-4 border-white/20 bg-surface object-cover shadow-xl" />
               <span className={`absolute -bottom-1 -right-1 w-5 h-5 rounded-full border-2 border-white ${personState.is_active !== false ? 'bg-emerald-500' : 'bg-surface-container-highest'}`}></span>
             </div>
             <div className="text-white pb-2">
@@ -856,45 +896,7 @@ export function ProfileView({ person, onClose, data }) {
             </div>
           )}
 
-          {activeTab === 'Device History' && (() => {
-            const [localHistory, setLocalHistory] = useState([]);
-            const [loadingHistory, setLoadingHistory] = useState(false);
-            const [clearing, setClearing] = useState(false);
-
-            useEffect(() => {
-              const fetchHistory = async () => {
-                const auth = JSON.parse(localStorage.getItem('ms-owner-auth'));
-                if (!auth?.token) return;
-                setLoadingHistory(true);
-                try {
-                  const historyData = await getUserLoginHistory(auth.token, personState.id);
-                  setLocalHistory(historyData || []);
-                } catch (err) {
-                  console.error(err);
-                } finally {
-                  setLoadingHistory(false);
-                }
-              };
-              fetchHistory();
-            }, [personState.id]);
-
-            const handleClearBinding = async () => {
-              if (!window.confirm("Are you sure you want to clear the device binding for this user?")) return;
-              const auth = JSON.parse(localStorage.getItem('ms-owner-auth'));
-              if (!auth?.token) return;
-              setClearing(true);
-              try {
-                const result = await updateUser(auth.token, personState.id, { clear_device_binding: true });
-                setPersonState(result.user);
-                alert("Device binding cleared successfully!");
-              } catch (err) {
-                alert(`Failed to clear device binding: ${err.message}`);
-              } finally {
-                setClearing(false);
-              }
-            };
-
-            return (
+          {activeTab === 'Device History' && (
               <div className="glass-card p-6 rounded-2xl animate-fadeIn space-y-6">
                 <div className="flex justify-between items-center border-b border-outline-variant/10 pb-4">
                   <div>
@@ -988,8 +990,7 @@ export function ProfileView({ person, onClose, data }) {
                   )}
                 </div>
               </div>
-            );
-          })()}
+          )}
 
           {activeTab === 'Settings' && (
             <div className="glass-card p-6 rounded-2xl animate-fadeIn space-y-6">

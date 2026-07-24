@@ -173,7 +173,7 @@ export function VerificationView({ data }) {
     setGrooming(data.grooming || []);
   }, [data]);
 
-  const pendingDocs = docs.filter((item) => item.status === 'pending_review');
+  const pendingDocs = docs.filter((item) => item.status === 'pending_review' || item.status === 'pending');
   const pendingAtt = attendance.filter((item) => item.status === 'pending_review' || item.status === 'manual_review');
   const groomingPhotos = grooming.filter((item) => item.photo_url || item.photo_path);
 
